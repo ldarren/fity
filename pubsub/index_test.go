@@ -219,7 +219,7 @@ func TestMultiClose(t *testing.T) {
 	checkContents(t, ch, []string{"hi", "hello"})
 }
 
-func checkContents(t *testing.T, ch chan interface{}, vals []string) {
+func checkContents(t *testing.T, ch chan any, vals []string) {
 	contents := []string{}
 	for v := range ch {
 		contents = append(contents, v.(string))

@@ -9,8 +9,12 @@ A fit and able pubsub service
 
 ## Run
 
-go run main.go
+make run
 
 ## Build
 
-go build
+make build
+
+## Test
+
+make test

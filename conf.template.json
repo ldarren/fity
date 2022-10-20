@@ -1,0 +1,11 @@
+{
+	"Server": {
+    	"Addr": ":2299"
+	},
+	"Ably": {
+		"Key": "An Ably API key to use"
+	},
+	"Path": {
+		"Asset": "asset/"
+	}
+}

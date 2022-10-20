@@ -15,6 +15,9 @@ type Config struct {
 	Ably struct {
 		Key string
 	}
+	Path struct {
+		Asset string
+	}
 }
 
 var config Config

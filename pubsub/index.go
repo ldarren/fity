@@ -33,8 +33,8 @@ type PubSub struct {
 type cmd struct {
 	op     operation
 	topics []string
-	ch     chan interface{}
-	msg    interface{}
+	ch     chan any
+	msg    any
 }
 
 // New creates a new PubSub and starts a goroutine for handling operations.
@@ -47,48 +47,48 @@ func New(capacity int) *PubSub {
 
 // Sub returns a channel on which messages published on any of
 // the specified topics can be received.
-func (ps *PubSub) Sub(topics ...string) chan interface{} {
+func (ps *PubSub) Sub(topics ...string) chan any {
 	return ps.sub(sub, topics...)
 }
 
 // SubOnce is similar to Sub, but only the first message published, after subscription,
 // on any of the specified topics can be received.
-func (ps *PubSub) SubOnce(topics ...string) chan interface{} {
+func (ps *PubSub) SubOnce(topics ...string) chan any {
 	return ps.sub(subOnce, topics...)
 }
 
 // SubOnceEach returns a channel on which callers receive, at most, one message
 // for each topic.
-func (ps *PubSub) SubOnceEach(topics ...string) chan interface{} {
+func (ps *PubSub) SubOnceEach(topics ...string) chan any {
 	return ps.sub(subOnceEach, topics...)
 }
 
-func (ps *PubSub) sub(op operation, topics ...string) chan interface{} {
-	ch := make(chan interface{}, ps.capacity)
+func (ps *PubSub) sub(op operation, topics ...string) chan any {
+	ch := make(chan any, ps.capacity)
 	ps.cmdChan <- cmd{op: op, topics: topics, ch: ch}
 	return ch
 }
 
 // AddSub adds subscriptions to an existing channel.
-func (ps *PubSub) AddSub(ch chan interface{}, topics ...string) {
+func (ps *PubSub) AddSub(ch chan any, topics ...string) {
 	ps.cmdChan <- cmd{op: sub, topics: topics, ch: ch}
 }
 
 // AddSubOnceEach adds subscriptions to an existing channel with SubOnceEach
 // behavior.
-func (ps *PubSub) AddSubOnceEach(ch chan interface{}, topics ...string) {
+func (ps *PubSub) AddSubOnceEach(ch chan any, topics ...string) {
 	ps.cmdChan <- cmd{op: subOnceEach, topics: topics, ch: ch}
 }
 
 // Pub publishes the given message to all subscribers of
 // the specified topics.
-func (ps *PubSub) Pub(msg interface{}, topics ...string) {
+func (ps *PubSub) Pub(msg any, topics ...string) {
 	ps.cmdChan <- cmd{op: pub, topics: topics, msg: msg}
 }
 
 // TryPub publishes the given message to all subscribers of
 // the specified topics if the topic has buffer space.
-func (ps *PubSub) TryPub(msg interface{}, topics ...string) {
+func (ps *PubSub) TryPub(msg any, topics ...string) {
 	ps.cmdChan <- cmd{op: tryPub, topics: topics, msg: msg}
 }
 
@@ -99,12 +99,11 @@ func (ps *PubSub) TryPub(msg interface{}, topics ...string) {
 // Unsub must be called from a goroutine that is different from the subscriber.
 // The subscriber must consume messages from the channel until it reaches the
 // end. Not doing so can result in a deadlock.
-func (ps *PubSub) Unsub(ch chan interface{}, topics ...string) {
+func (ps *PubSub) Unsub(ch chan any, topics ...string) {
 	if len(topics) == 0 {
 		ps.cmdChan <- cmd{op: unsubAll, ch: ch}
 		return
 	}
-
 	ps.cmdChan <- cmd{op: unsub, topics: topics, ch: ch}
 }
 
@@ -122,8 +121,8 @@ func (ps *PubSub) Shutdown() {
 
 func (ps *PubSub) start() {
 	reg := registry{
-		topics:    make(map[string]map[chan interface{}]subType),
-		revTopics: make(map[chan interface{}]map[string]bool),
+		topics:    make(map[string]map[chan any]subType),
+		revTopics: make(map[chan any]map[string]bool),
 	}
 
 loop:
@@ -176,21 +175,23 @@ loop:
 // registry maintains the current subscription state. It's not
 // safe to access a registry from multiple goroutines simultaneously.
 type registry struct {
-	topics    map[string]map[chan interface{}]subType
-	revTopics map[chan interface{}]map[string]bool
+	topics    map[string]map[chan any]subType
+	revTopics map[chan any]map[string]bool
 }
 
 type subType int
 
 const (
+	// use once in any topic
 	onceAny subType = iota
+	// use once per topic
 	onceEach
 	normal
 )
 
-func (reg *registry) add(topic string, ch chan interface{}, st subType) {
+func (reg *registry) add(topic string, ch chan any, st subType) {
 	if reg.topics[topic] == nil {
-		reg.topics[topic] = make(map[chan interface{}]subType)
+		reg.topics[topic] = make(map[chan any]subType)
 	}
 	reg.topics[topic][ch] = st
 
@@ -200,35 +201,31 @@ func (reg *registry) add(topic string, ch chan interface{}, st subType) {
 	reg.revTopics[ch][topic] = true
 }
 
-func (reg *registry) send(topic string, msg interface{}) {
+func (reg *registry) send(topic string, msg any) {
 	for ch, st := range reg.topics[topic] {
 		ch <- msg
-		switch st {
-		case onceAny:
-			for topic := range reg.revTopics[ch] {
-				reg.remove(topic, ch)
-			}
-		case onceEach:
-			reg.remove(topic, ch)
+		reg.removeUseOnce(st, topic, ch)
+	}
+}
+
+func (reg *registry) sendNoWait(topic string, msg any) {
+	for ch, st := range reg.topics[topic] {
+		select {
+		case ch <- msg:
+			reg.removeUseOnce(st, topic, ch)
+		default:
 		}
 	}
 }
 
-func (reg *registry) sendNoWait(topic string, msg interface{}) {
-	for ch, st := range reg.topics[topic] {
-		select {
-		case ch <- msg:
-			switch st {
-			case onceAny:
-				for topic := range reg.revTopics[ch] {
-					reg.remove(topic, ch)
-				}
-			case onceEach:
-				reg.remove(topic, ch)
-			}
-		default:
+func (reg *registry) removeUseOnce(st subType, topic string, ch chan any) {
+	switch st {
+	case onceAny:
+		for topic := range reg.revTopics[ch] {
+			reg.remove(topic, ch)
 		}
-
+	case onceEach:
+		reg.remove(topic, ch)
 	}
 }
 
@@ -238,13 +235,13 @@ func (reg *registry) removeTopic(topic string) {
 	}
 }
 
-func (reg *registry) removeChannel(ch chan interface{}) {
+func (reg *registry) removeChannel(ch chan any) {
 	for topic := range reg.revTopics[ch] {
 		reg.remove(topic, ch)
 	}
 }
 
-func (reg *registry) remove(topic string, ch chan interface{}) {
+func (reg *registry) remove(topic string, ch chan any) {
 	if _, ok := reg.topics[topic]; !ok {
 		return
 	}

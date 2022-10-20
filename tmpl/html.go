@@ -1,15 +1,23 @@
 package tmpl
 
 import (
+	"errors"
 	"html/template"
+	"io"
+	"log"
 )
 
-var map = make(Map[string]*template.Template)
+var tmpls *template.Template
 
-func NewHTMLTemplate(fname string) {
-	map[fname] = template.Must(template.New(fname).ParseFiles(fname))
+func Load(path string) error {
+	tmpls = template.Must(template.ParseGlob(path + "*.html"))
+	if tmpls == nil {
+		log.Fatal("Template not found at: " + path)
+		return errors.New("Template not found at" + path)	
+	}
+	return nil
 }
 
-func GetHTML(name, buf *bytes.Buffer) error {
-	return map[name[.Execute(buf, nil)
+func RenderHTML(w io.Writer, name string, data any) error {
+	return  tmpls.ExecuteTemplate(w, name + ".html", data)
 }
