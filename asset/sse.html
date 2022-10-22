@@ -29,15 +29,17 @@ eventBtn.onclick = () => {
 	  }
 	})
 
-	xhr.open('POST', 'https://rest.ably.io/channels/test/messages?key={{ .Key}}')
+	// 'https://rest.ably.io/channels/test/messages?key={{ .Key}}')
+	xhr.open('POST', 'http://localhost:2299/api/topics/123?key={{ .Key}}')
 	xhr.setRequestHeader('Authorization', 'Basic LoginTokenPlaceHere')
 	xhr.setRequestHeader('Content-Type', 'application/json')
 
 	xhr.send(data)
 }
 
+//'https://realtime.ably.io/sse?channels=test&v=1.2&separator=|&enveloped=true&heartbeats=truei&key={{ .Key}}',
 const sse = new EventSource(
-	'https://realtime.ably.io/sse?channels=test&v=1.2&separator=|&enveloped=true&heartbeats=truei&key={{ .Key}}',
+	'http://localhost:2299/api/topics/123?channels=test&v=1.2&separator=|&enveloped=true&heartbeats=truei&key={{ .Key}}',
 	{ withCredentials: true }
 )
 sse.onopen = () => {
