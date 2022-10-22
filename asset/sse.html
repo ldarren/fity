@@ -14,10 +14,7 @@ const eventList = document.getElementById('res')
 eventBtn.onclick = () => {
 	// WARNING: For POST requests, body is set to null by browsers.
 	var data = JSON.stringify({
-	  'name': 'second',
-	  'data': 'data6',
-	  'encoding': 'utf-8',
-	  'id': '22345-abcde-1243'
+	  'text': Date.now().toString(36)
 	})
 
 	var xhr = new XMLHttpRequest()
