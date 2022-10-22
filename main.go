@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"fmt"
-	"time"
 	"net/http"
 	"encoding/json"
 
@@ -13,16 +12,12 @@ import (
 	"github.com/ldarren/fity/cfg"
 	"github.com/ldarren/fity/tmpl"
 	"github.com/ldarren/fity/pubsub"
-	"github.com/ldarren/fity/sse"
 )
 
-var broker = sse.NewBroker()
 var ps = pubsub.New(0)
 
 func debugHandler(w http.ResponseWriter, req bunrouter.Request) error {
 	log.Println("Receiving event")
-	eventString := fmt.Sprintf("the time is %v", time.Now())
-	broker.Notifier <- []byte(eventString)
 
 	return bunrouter.JSON(w, bunrouter.H{
 		"route":  req.Route(),
@@ -108,36 +103,6 @@ func server(addr string) {
 
 	log.Printf("listening on %v", addr)
 	log.Println(http.ListenAndServe(addr, router))
-}
-
-const topic = "topic"
-
-func publish(ps *pubsub.PubSub) {
-	for {
-		ps.Pub("msg" + time.Now().String(), topic)
-	}
-}
-
-func testPubsub() {
-	ps := pubsub.New(0)
-	ch := ps.Sub(topic)
-	go publish(ps)
-
-	for i := 1; ; i++ {
-		if msg, ok := <-ch; ok {
-			fmt.Printf("Received %s, %d times.\n", msg, i)
-		} else {
-			fmt.Printf("Channel %s, closed.\n", topic)
-			break
-		}
-
-		if i == 1 {
-			// See the documentation of Unsub for why it is called in a new
-			// goroutine.
-			fmt.Printf("Unsub %s.\n", topic)
-			go ps.Unsub(ch, topic)
-		}
-	}
 }
 
 func main() {
